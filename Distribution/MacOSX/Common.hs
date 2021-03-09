@@ -100,11 +100,12 @@ type Exclusions = [String]
 -- libgcc, etc. - basically things which we would expect to be present
 -- on any functioning OSX installation.
 defaultExclusions :: Exclusions
-defaultExclusions = 
+defaultExclusions =
   ["/System/Library/Frameworks/",
    "/libSystem.",
    "/libgcc_s.",
-   "/libobjc."
+   "/libobjc.",
+   "/usr/lib/"
   ]
 
 -- | Compute item's path relative to app bundle root.
