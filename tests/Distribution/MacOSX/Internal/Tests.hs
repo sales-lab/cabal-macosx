@@ -1,24 +1,19 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
+
 module Distribution.MacOSX.Internal.Tests where
 
-import Prelude hiding (catch)
 import Test.HUnit (Assertion, assertEqual)
 import Test.Framework (Test, mutuallyExclusive, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 
-#if MIN_VERSION_Cabal(2,0,0)
 import Distribution.Types.ExecutableScope
-#endif
 import Distribution.PackageDescription (BuildInfo(..), Executable(..), emptyBuildInfo, emptyExecutable)
 
 import Distribution.MacOSX.Internal (getMacAppsForBuildableExecutors)
 import Distribution.MacOSX.Common
 
-#if MIN_VERSION_Cabal(2,0,0)
 getExecutableScopeUnknown :: ExecutableScope
 getExecutableScopeUnknown = exeScope $ emptyExecutable
-#endif
 
 macosxInternalTests :: Test
 macosxInternalTests = testGroup "Distribution.MacOSX.Internal"
@@ -47,13 +42,8 @@ testBuildMacApp_noExecutables = do
 
 testBuildMacApp_twoBuildableExecutables :: Assertion
 testBuildMacApp_twoBuildableExecutables = do
-#if MIN_VERSION_Cabal(2,0,0)
     let execs = [ Executable "Dummy One" "/tmp" getExecutableScopeUnknown emptyBuildInfo
                   , Executable "Dummy Two" "/tmp" getExecutableScopeUnknown emptyBuildInfo ]
-#else
-    let execs = [ Executable "Dummy One" "/tmp" emptyBuildInfo
-                  , Executable "Dummy Two" "/tmp" emptyBuildInfo ]
-#endif
     let actual = getMacAppsForBuildableExecutors [] execs
     let expected = [ MacApp "Dummy One" Nothing Nothing [] [] DoNotChase
                      , MacApp "Dummy Two" Nothing Nothing [] [] DoNotChase ]
@@ -61,26 +51,16 @@ testBuildMacApp_twoBuildableExecutables = do
 
 testBuildMacApp_twoExcetuablesOneBuildableAndOneNot :: Assertion
 testBuildMacApp_twoExcetuablesOneBuildableAndOneNot = do
-#if MIN_VERSION_Cabal(2,0,0)
     let execs = [ Executable "Dummy One" "/tmp" getExecutableScopeUnknown (emptyBuildInfo { buildable = False })
                   , Executable "Dummy Two" "/tmp" getExecutableScopeUnknown  emptyBuildInfo ]
-#else
-    let execs = [ Executable "Dummy One" "/tmp" (emptyBuildInfo { buildable = False })
-                  , Executable "Dummy Two" "/tmp" emptyBuildInfo ]
-#endif
     let actual = getMacAppsForBuildableExecutors [] execs
     let expected = [ MacApp "Dummy Two" Nothing Nothing [] [] DoNotChase ]
     assertEqual "two mac-apps should be built" expected actual
 
 testBuildMacApp_twoAppsAndTwoExecutablesOneBuildableOneNot :: Assertion
 testBuildMacApp_twoAppsAndTwoExecutablesOneBuildableOneNot = do
-#if MIN_VERSION_Cabal(2,0,0)
     let execs = [ Executable "Dummy One" "/tmp" getExecutableScopeUnknown (emptyBuildInfo { buildable = False })
                   , Executable "Dummy Two" "/tmp" getExecutableScopeUnknown  emptyBuildInfo ]
-#else
-    let execs = [ Executable "Dummy One" "/tmp" (emptyBuildInfo { buildable = False })
-                  , Executable "Dummy Two" "/tmp" emptyBuildInfo ]
-#endif
     let apps = [ MacApp "Dummy One" Nothing Nothing [] [] DoNotChase
                  , MacApp "Dummy Two" Nothing Nothing [] [] DoNotChase ]
     let actual = getMacAppsForBuildableExecutors apps execs

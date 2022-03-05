@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
+
 {- | Cabal support for creating Mac OSX application bundles.
 
 GUI applications on Mac OSX should be run as application /bundles/;
@@ -21,17 +21,9 @@ module Distribution.MacOSX.Internal (
   osxIncantations
 ) where
 
-#if MIN_VERSION_Cabal(2,0,0)
 import Data.String (fromString)
-import Distribution.Text (display)
 import Distribution.Types.UnqualComponentName (unUnqualComponentName)
-#endif
-import Prelude hiding ( catch )
-import System.Cmd ( system )
-import System.Exit
 import System.FilePath
-import Control.Monad (filterM)
-import System.Directory (doesDirectoryExist)
 
 import Distribution.PackageDescription (BuildInfo(..), Executable(..))
 import Distribution.MacOSX.Common
@@ -46,19 +38,11 @@ getMacAppsForBuildableExecutors macApps executables =
     [] -> map mkDefault buildables
     xs -> filter buildableApp xs
   where -- Make a default MacApp in absence of explicit from Setup.hs
-#if MIN_VERSION_Cabal(2,0,0)
         mkDefault x = MacApp (unUnqualComponentName $ exeName x) Nothing Nothing [] [] DoNotChase
-#else
-        mkDefault x = MacApp (exeName x) Nothing Nothing [] [] DoNotChase
-#endif
 
         -- Check if a MacApp is in that list of buildable executables.
         buildableApp :: MacApp -> Bool
-#if MIN_VERSION_Cabal(2,0,0)
         buildableApp app = any (\e -> exeName e == fromString (appName app)) buildables
-#else
-        buildableApp app = any (\e -> exeName e == appName app) buildables
-#endif
 
         -- List of buildable executables from .cabal file.
         buildables :: [Executable]
@@ -69,6 +53,6 @@ getMacAppsForBuildableExecutors macApps executables =
 osxIncantations ::
   FilePath -- ^ Path to application bundle root.
   -> MacApp -> IO ()
-osxIncantations appPath app =
+osxIncantations appPath _app =
   do writeFile (appPath </> "PkgInfo") "APPL????"
      return ()
