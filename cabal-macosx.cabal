@@ -61,6 +61,13 @@ Executable macosx-app
                     , process
                     , text
                     , containers
+  Other-modules:    Distribution.MacOSX,
+                    Distribution.MacOSX.AppBuildInfo,
+                    Distribution.MacOSX.Common,
+                    Distribution.MacOSX.DG,
+                    Distribution.MacOSX.Dependencies,
+                    Distribution.MacOSX.Internal,
+                    Distribution.MacOSX.Templates
 
 test-suite tests
   ghc-options:      -Wall
