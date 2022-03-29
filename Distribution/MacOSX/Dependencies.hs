@@ -60,17 +60,30 @@ module Distribution.MacOSX.Dependencies (
   appDependencyGraph
 ) where
 
+import Control.Exception
 import Control.Monad
+import Crypto.Hash
+import Crypto.Hash.IO
+import qualified Data.ByteString.Lazy as B
+import Data.IORef
 import Data.List
+import qualified Data.Map.Strict as M
 import Data.Maybe
 import System.Directory
-import System.FilePath
-import System.Process
 import System.Exit
+import System.FilePath
+import System.IO.Error
+import System.Process
 import Text.ParserCombinators.Parsec
 
 import Distribution.MacOSX.Common
 import Distribution.MacOSX.DG
+
+
+-- | Deduplicated dependency, referencing a file and possibly an already
+-- exising copy to link to.
+data DDeps = DDeps FDeps (Maybe FilePath)
+
 
 -- | Include any library dependencies required in the app.
 includeDependencies ::
@@ -79,7 +92,8 @@ includeDependencies ::
 includeDependencies appPath app =
   do dg <- appDependencyGraph appPath app
      let fDeps = dgFDeps dg
-     mapM_ (copyInDependency appPath app) fDeps
+     dDeps <- dedupDependencies fDeps
+     mapM_ (copyInDependency appPath app) dDeps
      mapM_ (updateDependencies appPath app) fDeps
 
 -- | Compute application's library dependency graph.
@@ -191,19 +205,74 @@ exclude excls (FDeps p ds) = FDeps p $ filter checkExclude ds
   where checkExclude :: FilePath -> Bool
         checkExclude f = not $ any (`isInfixOf` f) excls
 
+-- | Deduplicate dependencies, transforming some files into links.
+dedupDependencies :: [FDeps] -> IO [DDeps]
+dedupDependencies deps = run
+  where
+    run = do
+      digests <- newIORef mempty
+      mapM (loop digests) deps
+
+    loop digests fd@(FDeps src _) = DDeps fd <$>
+      handleJust (guard . isDoesNotExistError)
+                 (const $ return Nothing)
+                 (computeDigest src >>= dedupWithDigest digests src)
+
+-- | Compute the digest of a file content.
+computeDigest :: FilePath -> IO (Digest SHA256)
+computeDigest filename = do
+  putStrLn $ "Computing hash of " ++ filename
+  bytes <- B.readFile filename
+  ctx <- hashMutableInit
+  mapM_ (hashMutableUpdate ctx) (B.toChunks bytes)
+  hashMutableFinalize ctx
+
+-- | Store the file digest in the provided map, returning the path of another
+-- file with the same content if it can be found.
+dedupWithDigest :: IORef (M.Map (Digest SHA256) FilePath)
+                -> FilePath
+                -> Digest SHA256
+                -> IO (Maybe FilePath)
+dedupWithDigest digests filename digest = do
+  digests' <- readIORef digests
+  let other = M.lookup digest digests'
+  when (isNothing other) $
+    writeIORef digests $! M.insert digest filename digests'
+  return other
+
 -- | Copy some object file's library dependencies into the application
 -- bundle.
 copyInDependency ::
   FilePath -- ^ Path to application bundle root.
   -> MacApp
-  -> FDeps -- ^ Dependencies to copy in.
+  -> DDeps -- ^ Dependencies to copy in.
   -> IO ()
-copyInDependency appPath app (FDeps src _) =
+copyInDependency appPath app (DDeps (FDeps src _) linkTo) =
   Control.Monad.unless (src == appName app) $
-         do putStrLn $ "Copying " ++ src ++ " to " ++ tgt
-            createDirectoryIfMissing True $ takeDirectory tgt
-            copyFile src tgt
-    where tgt = appPath </> pathInApp app src
+    case linkTo of
+      Nothing -> do
+        putStrLn $ "Copying " ++ src ++ " to " ++ tgt
+        createDirectoryIfMissing True $ takeDirectory tgt
+        copyFile src tgt
+      Just linkRaw -> do
+        let linkRel = relativePath tgt (appPath </> pathInApp app linkRaw)
+        putStrLn $ "Linking " ++ tgt ++ " to " ++ linkRel
+        createDirectoryIfMissing True $ takeDirectory tgt
+        removePathForcibly tgt
+        createFileLink linkRel tgt
+  where tgt = appPath </> pathInApp app src
+
+-- | Transform a path into a relative form, with respect to a second path.
+relativePath :: FilePath -> FilePath -> FilePath
+relativePath path ref =
+  let (pathS, refS) = dropCommonPrefix (splitPath path) (splitPath ref)
+  in joinPath (replicate (length pathS - 1) ".." ++ refS)
+
+dropCommonPrefix :: Eq a => [a] -> [a] -> ([a], [a])
+dropCommonPrefix xs ys =
+  if null xs || null ys || head xs /= head ys
+     then (xs, ys)
+     else dropCommonPrefix (tail xs) (tail ys)
 
 -- | Update some object file's library dependencies to point to
 -- bundled copies of libraries.
